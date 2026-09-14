@@ -1,0 +1,159 @@
+// =====================================================================
+// Project: Loan Portfolio Funnel & Risk Analytics
+// File: dax_measures_library.dax
+// Description: Complete DAX measure library for Power BI data model.
+// =====================================================================
+
+// ---------------------------------------------------------------------
+// 1. Core Funnel & Volume Measures
+// ---------------------------------------------------------------------
+
+Total Leads = 
+COUNTROWS('loan_applications')
+
+Total Disbursed Applications = 
+CALCULATE(
+    COUNTROWS('loan_applications'),
+    'loan_applications'[final_stage_reached] = "Disbursed"
+)
+
+Overall Conversion Rate % = 
+DIVIDE([Total Disbursed Applications], [Total Leads], 0)
+
+Total Origination Volume ($) = 
+CALCULATE(
+    SUM('loan_applications'[loan_amount]),
+    'loan_applications'[final_stage_reached] = "Disbursed"
+)
+
+Total Active Outstanding Balance ($) = 
+SUM('loan_applications'[outstanding_balance])
+
+Average Loan Amount ($) = 
+CALCULATE(
+    AVERAGE('loan_applications'[loan_amount]),
+    'loan_applications'[final_stage_reached] = "Disbursed"
+)
+
+Average Turnaround Time (Days) = 
+AVERAGE('loan_applications'[total_funnel_duration_hours]) / 24
+
+
+// ---------------------------------------------------------------------
+// 2. Stage-by-Stage Funnel Transition & Drop-off Measures
+// ---------------------------------------------------------------------
+
+Stage 1 Leads = 
+CALCULATE(
+    COUNTROWS('loan_stage_transitions'),
+    'loan_stage_transitions'[stage_number] = 1
+)
+
+Stage 2 Submitted = 
+CALCULATE(
+    COUNTROWS('loan_stage_transitions'),
+    'loan_stage_transitions'[stage_number] = 2,
+    'loan_stage_transitions'[status] = "Completed"
+)
+
+Stage 3 Docs Verified = 
+CALCULATE(
+    COUNTROWS('loan_stage_transitions'),
+    'loan_stage_transitions'[stage_number] = 3,
+    'loan_stage_transitions'[status] = "Completed"
+)
+
+Stage 4 Credit Approved = 
+CALCULATE(
+    COUNTROWS('loan_stage_transitions'),
+    'loan_stage_transitions'[stage_number] = 5,
+    'loan_stage_transitions'[status] = "Completed"
+)
+
+Stage 5 Disbursed = 
+CALCULATE(
+    COUNTROWS('loan_stage_transitions'),
+    'loan_stage_transitions'[stage_number] = 7,
+    'loan_stage_transitions'[status] = "Completed"
+)
+
+Doc Verification Pass Rate % = 
+DIVIDE([Stage 3 Docs Verified], [Stage 2 Submitted], 0)
+
+Underwriting Approval Rate % = 
+DIVIDE([Stage 4 Credit Approved], [Stage 3 Docs Verified], 0)
+
+Offer Take-Up Rate % = 
+DIVIDE([Stage 5 Disbursed], [Stage 4 Credit Approved], 0)
+
+
+// ---------------------------------------------------------------------
+// 3. Risk, Delinquency & Portfolio Quality Measures
+// ---------------------------------------------------------------------
+
+Performing Loans Count = 
+CALCULATE(
+    COUNTROWS('loan_applications'),
+    'loan_applications'[portfolio_loan_status] IN {"Current (Good Standing)", "Fully Paid Off"}
+)
+
+Delinquent Loans Count (30+ DPD) = 
+CALCULATE(
+    COUNTROWS('loan_applications'),
+    'loan_applications'[portfolio_loan_status] IN {"Delinquent (30-59 DPD)", "Delinquent (60-89 DPD)", "Default / Charge-Off (90+ DPD)"}
+)
+
+PAR 30 Amount ($) = 
+CALCULATE(
+    SUM('loan_applications'[outstanding_balance]),
+    'loan_applications'[portfolio_loan_status] IN {"Delinquent (30-59 DPD)", "Delinquent (60-89 DPD)", "Default / Charge-Off (90+ DPD)"}
+)
+
+PAR 30 Rate % = 
+DIVIDE([PAR 30 Amount ($)], [Total Active Outstanding Balance ($)], 0)
+
+Default / Charge-Off Amount ($) = 
+CALCULATE(
+    SUM('loan_applications'[outstanding_balance]),
+    'loan_applications'[portfolio_loan_status] = "Default / Charge-Off (90+ DPD)"
+)
+
+Cumulative Default Rate % = 
+DIVIDE(
+    CALCULATE(COUNTROWS('loan_applications'), 'loan_applications'[portfolio_loan_status] = "Default / Charge-Off (90+ DPD)"),
+    [Total Disbursed Applications],
+    0
+)
+
+Weighted Average APR % = 
+CALCULATE(
+    DIVIDE(
+        SUMX('loan_applications', 'loan_applications'[loan_amount] * 'loan_applications'[interest_rate_pct]),
+        SUM('loan_applications'[loan_amount]),
+        0
+    ),
+    'loan_applications'[final_stage_reached] = "Disbursed"
+)
+
+Weighted Average DTI % = 
+CALCULATE(
+    AVERAGE('loan_applications'[debt_to_income_ratio]),
+    'loan_applications'[final_stage_reached] = "Disbursed"
+)
+
+
+// ---------------------------------------------------------------------
+// 4. Scenario Simulation: 14% Conversion Lift Modeler
+// ---------------------------------------------------------------------
+
+Projected Disbursals (14% Lift) = 
+[Total Disbursed Applications] * 1.14
+
+Projected Origination Volume (14% Lift) = 
+[Total Origination Volume ($)] * 1.14
+
+Incremental Origination Revenue ($) = 
+[Projected Origination Volume (14% Lift)] - [Total Origination Volume ($)]
+
+Projected Conversion Rate (14% Lift) = 
+[Overall Conversion Rate %] * 1.14
